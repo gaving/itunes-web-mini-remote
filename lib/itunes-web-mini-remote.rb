@@ -9,24 +9,26 @@ require 'sinatra'
 
 # Just make a quick test to see if iTunes is running
 itunes = Appscript.app('ITunes')
-begin
-  itunes.name
-rescue
-  puts 'You need to start iTunes'
-  exit
-end
+itunes.launch unless itunes.is_running? # run iTunes unless if it's already running.
 
 puts "Remember to select 'All genres', 'All artists', 'All albums' in iTunes, or you'll get annoyed sooner or later..."
 
 # Organize and cache the whole music collection.
 # (Ugly code...)
 album_struct = Hash.new
+track_struct = Hash.new
 itunes.sources.get.each do |source|
   puts "Loading source...  " + source.name.get
   source.playlists['Music'].tracks.get.each do |track|
       album = track.album.get
       album_struct[album] ||= []
       album_struct[album] << track
+
+      # For the play action
+      artist = track.artist.get
+      track_name = track.name.get
+      track_struct[artist] ||= {}
+      track_struct[artist][track_name] = track
   end
   break
 end
@@ -122,6 +124,24 @@ get '/albums/:album_id/:track_number' do
   # ...so we'll do this instead:
   #system "osascript -e 'tell application \"iTunes\" to play (tracks of (playlist \"Music\") whose database ID is #{albums[album_id].tracks[track_number].database_id})'"
 
+  redirect '/'
+end
+
+# Starts playing a specific track given the artist and track name
+get '/play/:artist/:title' do
+  artist = params[:artist].to_s
+  title = params[:title].to_s
+
+  whose = Appscript.its
+
+  # Far too slow
+  # track_ref = itunes.library_playlists.first.tracks[whose.artist.eq(artist).and(whose.name.eq(title)).and(whose.video_kind.eq(:none)).and(whose.podcast.eq(false))]
+  track_ref = track_struct[artist][title]
+
+  # Check it track exists.
+  if track_ref.exists
+      itunes.play(track_ref)
+  end
   redirect '/'
 end
 
